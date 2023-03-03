@@ -171,7 +171,9 @@ class Edge: public Color {
 		Vector2 pixel(u_x, u_y);
 		Color pixelCol(r,g,b);
 		for(int i = 0; i <= steps; i++){
-			drawPixel(new Vector2(pixel.x / scale, pixel.y / scale), &pixelCol);
+			Vector2* newPix = new Vector2(pixel.x / scale, pixel.y / scale);
+			drawPixel(newPix, &pixelCol);
+			delete newPix;
 			pixel.x += xinc;
 			pixel.y += yinc;	
 		}
