@@ -77,6 +77,9 @@ class Vertex: public Vector3, public Color{
 		x = _x;
 		y = _y;
 		z = _z;
+		lx = 0;
+		ly = 0;
+		lz = 0;
 		r = _r;
 		g = _g;
 		b = _b;
@@ -85,6 +88,9 @@ class Vertex: public Vector3, public Color{
 		x = _x;
 		y = _y;
 		z = _z;
+		lx = 0;
+		ly = 0;
+		lz = 0;
 		r = rgb.r;
 		g = rgb.g;
 		b = rgb.b;
@@ -110,6 +116,12 @@ class Vertex: public Vector3, public Color{
 		lx = x - origin.x;
 		ly = y - origin.y;
 		lz = z - origin.z;
+	}
+
+	void setGlobal(Vector3 origin){
+		x = lx + origin.x;
+		y = ly + origin.y;
+		z = lz + origin.z;
 	}
 };
 
@@ -147,45 +159,21 @@ class Edge: public Color {
 		float Fx = floor(v_x);
 		float Fy = floor(v_y);
 
-		bool Wx = Dx > 0;
-		bool Wy = Dy > 0;
+		float steps = abs(Dx) > abs(Dy) ? abs(Dx) : abs(Dy);
 
-		if(abs(Dx) == 0){
-			Dx = .0001;
+		if (steps == 0) {
+			steps = .000001f;
 		}
 
-		float a = atan(abs(Dy) / abs(Dx));
+		float xinc = Dx / steps;
+		float yinc = Dy / steps;
 
-		Vector2 prevpoint(u_x, u_y);
-		bool notFound = true;
-
-
-		float Adjx = u_x - floor(u_x);
-		float Adjy = u_y - floor(u_y);
-	
-		float Ix = 1 - (Wx ? Adjx : -Adjx);
-		float Iy = 1 + (Wy ? Adjy : -Adjy);
-		
-		float Rx = Ix / cos(a);
-		float Ry = Iy / sin(a);
-		while (notFound){
-			if (Rx < Ry){
-				prevpoint = Vector2 (prevpoint.x + (Wx ? 1 : -1), prevpoint.y);
-				Ix += 1;
-				Rx = Ix / cos(a);
-			}else{
-				prevpoint = Vector2 (prevpoint.x, prevpoint.y + (Wy ? 1 : -1));
-				Iy += 1;
-				Ry = Iy / sin(a);
-			}
-			Color pointcol(r, g, b);
-			Vector2 pointdraw(prevpoint.x / scale,prevpoint.y/ scale);
-			drawPixel(&pointdraw, &pointcol);
-			if(floor(prevpoint.x) >= Fx && Wx || floor(prevpoint.x) <= Fx && !Wx){
-				if(floor(prevpoint.y) >= Fy && Wy || floor(prevpoint.y) <= Fy && !Wy){
-					notFound = false;
-				}
-			}
+		Vector2 pixel(u_x, u_y);
+		Color pixelCol(r,g,b);
+		for(int i = 0; i <= steps; i++){
+			drawPixel(new Vector2(pixel.x / scale, pixel.y / scale), &pixelCol);
+			pixel.x += xinc;
+			pixel.y += yinc;	
 		}
 	}
 };
@@ -195,6 +183,7 @@ class Face {
 	std::vector<Edge*> edges;
 	std::vector<Vertex*> verts;
 	Vector3 origin;
+	Vector3 rotation;
 	
 	Face(std::vector<Edge*> _edges){
 		edges = _edges;
@@ -224,6 +213,7 @@ class Face {
 
 		int verts_count = verts.size();
 		origin = Vector3(x_sum / verts_count, y_sum / verts_count, z_sum / verts_count);
+		rotation = Vector3();
 
 		for(Vertex* vertex : verts){
 			vertex->setLocal(origin);
@@ -236,22 +226,32 @@ class Face {
 		}
 	}
 
+	void rotate2D(float radians){
+		rotation.z += radians;
+		//rotation.z = fmod(rotation.z, 2.0f);
+
+		float ix = cos(rotation.z);
+		float iy = -sin(rotation.z);
+		float jx = sin(rotation.z);
+		float jy = cos(rotation.z);
+
+		for (Vertex* vert : verts) {
+			vert->x = (ix * vert->lx + jx * vert->ly) + origin.x;
+			vert->y = (iy * vert->lx + jy * vert->ly) + origin.y;
+		}
+	}
+
 };
 
 void drawPixel(Vector2* point, Color* rgb) {
-	if(point->x < 0 || point->y < 0){
-		cout<< "fail";
+	if(point->x < 0.0f || point->y < 0.0f || point->x > 100.0f || point->y > 100.0f){
 		return;
 	}
-
-	if(point->x > 100){
-		point->x = 100;
-	}
-
-	if(point->y > 100){
-		point->y = 100;
-	}
-	int ix = int((point->x * trueresD100 + point->y * trueres * trueresD100)) * 5;
+	
+	float _x = round(point->x * trueresD100) / trueresD100;
+	float _y = round(point->y * trueresD100) / trueresD100;
+	
+	int ix = int((_x * trueresD100 + _y * trueres * trueresD100)) * 5;
 
 	points[ix + 2] = GLfloat(rgb->r);
 	points[ix + 3] = GLfloat(rgb->g);
@@ -259,8 +259,7 @@ void drawPixel(Vector2* point, Color* rgb) {
 }
 void drawPixel(Vertex* v) {
 
-	if (v->x < 0 || v->y < 0) {
-		cout << "fail";
+	if (v->x < 0 || v->y < 0 || v->x > 100.0f || v->y > 100.0f) {
 		return;
 	}
 
@@ -271,7 +270,11 @@ void drawPixel(Vertex* v) {
 	if (v->y > 100) {
 		v->y = 100;
 	}
-	int ix = int((v->x * trueresD100 + v->y * trueres * trueresD100)) * 5;
+
+	float _x = round(v->x * trueresD100) / trueresD100;
+	float _y = round(v->y * trueresD100) / trueresD100;
+
+	int ix = int((_x * trueresD100 + _y * trueres * trueresD100)) * 5;
 
 	points[ix + 2] = GLfloat(v->r);
 	points[ix + 3] = GLfloat(v->g);
@@ -351,13 +354,13 @@ int main() {
   Color drawColor(1,1,1);
 
 	Vertex* Varray [4] = {
-		new Vertex(30.0f, 10.0f, 0.0f, 1,0,0),
-		new Vertex(90.0f, 10.0f, 0.0f, 1,0,0),
-		new Vertex(90.0f, 90.0f, 0.0f, 1,0,0),
-		new Vertex(10.0f, 90.0f, 0.0f, 1,0,0),
+		new Vertex(40.0f, 40.0f, 0.0f, 1,1,1),
+		new Vertex(60.0f, 40.0f, 0.0f, 1,1,1),
+		new Vertex(60.0f, 60.0f, 0.0f, 1,1,1),
+		new Vertex(40.0f, 60.0f, 0.0f, 1,1,1),
 	};
-	
-	vector<Edge*> Earray{
+
+	vector<Edge*> Earray {
 		new Edge(Varray[0],Varray[1],drawColor),
 		new Edge(Varray[1],Varray[2],drawColor),
 		new Edge(Varray[2],Varray[3],drawColor),
@@ -365,11 +368,10 @@ int main() {
 	};
 
 	Face square(Earray);
-	
+
 
 	// Main while loop
 	while (!glfwWindowShouldClose(window)) {
-
 		if (state == 0) {
 			if (r_value < 1) {
 				r_value += .01f;
@@ -399,18 +401,17 @@ int main() {
 			}
 		}
 
-
+		square.rotate2D(.005f);
 
 		/*
 		for (Edge* e : Earray) {
 			e->Vis2D();
 		}
-
+		*/
 		for (Vertex* v : Varray) {
 			v->Vis2D();
 		}
-		*/
-
+		
 		square.Vis2D();
 
 		VAO VAO1;
